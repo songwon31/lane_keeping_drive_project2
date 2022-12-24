@@ -1,0 +1,4 @@
+<launch>
+    <include file="$(find xycar_lidar)/launch/lidar_noviewer.launch" />
+    <node pkg="lidar_test" type="main" name="lidar_test" output="screen"/>
+</launch>

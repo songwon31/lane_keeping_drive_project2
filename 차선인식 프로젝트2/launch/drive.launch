@@ -1,6 +1,0 @@
-<launch>
-    <include file="$(find xycar_motor)/launch/xycar_motor.launch"/>
-    <include file="$(find usb_cam)/launch/usb_cam-noviewer.launch" />
-    <node name="Lane_Keeping_System" pkg="lane_keeping_system" type="lane_keeping_system_node" output="screen"/>
-    <param name="config_path" type="str" value="$(find lane_keeping_system)/config/config.yaml"/>
-</launch>
