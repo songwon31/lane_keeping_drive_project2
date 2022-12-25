@@ -1,31 +1,17 @@
-/**
- * @file lane_keeping_system.cpp
- * @author Jongrok Lee (lrrghdrh@naver.com)
- * @brief Lane Keeping System Class source file
- * @version 0.2
- * @date 2022-11-27
- */
 #include "lane_keeping_system/lane_keeping_system.h"
 
 namespace xycar {
 LaneKeepingSystem::LaneKeepingSystem() {
   std::string config_path;
   nh_.getParam("config_path", config_path);
-  // std::cout << config_path << std::endl;
   YAML::Node config = YAML::LoadFile(config_path);
-  // std::cout << config << std::endl;
-
-  float p_gain, i_gain, d_gain;
-  int sample_size;
   pid_ptr_ = new PID(config["PID"]["P_GAIN"].as<float>(),
                      config["PID"]["I_GAIN"].as<float>(),
                      config["PID"]["D_GAIN"].as<float>());
   ma_filter_ptr_ = new MovingAverageFilter(
-    config["MOVING_AVERAGE_FILTER"]["SAMPLE_SIZE"].as<int>());
-
+    config["MOVING_AVERAGE_FILTER"]["SAMPLE_SIZE"].as<uint8_t>());
   hough_transform_lane_detector_ptr_ = new HoughTransformLaneDetector(config);
   setParams(config);
-
   pub_ = nh_.advertise<xycar_msgs::xycar_motor>(pub_topic_name_, queue_size_);
   sub_ = nh_.subscribe(
     sub_topic_name_, queue_size_, &LaneKeepingSystem::imageCallback, this);
@@ -44,8 +30,6 @@ void LaneKeepingSystem::setParams(const YAML::Node &config) {
   acceleration_step_ = config["XYCAR"]["ACCELERATION_STEP"].as<float>();
   deceleration_step_ = config["XYCAR"]["DECELERATION_STEP"].as<float>();
   debug_ = config["DEBUG"].as<bool>();
-
-  straight_count = 0;
 }
 
 LaneKeepingSystem::~LaneKeepingSystem() {
@@ -55,7 +39,10 @@ LaneKeepingSystem::~LaneKeepingSystem() {
 }
 
 void LaneKeepingSystem::run() {
-  int lpos, rpos, error, ma_mpos, left_mpos, right_mpos;
+  uint16_t lpos;
+  uint16_t rpos;
+  uint16_t ma_mpos;
+  int32_t error;
   float steering_angle;
   ros::Rate rate(30);
   while (ros::ok()) {
@@ -69,14 +56,7 @@ void LaneKeepingSystem::run() {
 
     ma_filter_ptr_->addSample((lpos + rpos) / 2);
     ma_mpos = ma_filter_ptr_->getWeightedMovingAverage();
-    // for(int i=0; i<9; ++i)
-    // {
-    //     delay_mpos[i]=delay_mpos[i+1];
-    // }
-    //delay_mpos[9]=ma_mpos;
     error = ma_mpos - frame_.cols / 2;
-    // error = error / 5;
-    // error = error * 5;
     steering_angle = std::max(-(float)kXycarSteeringAngleLimit,
                               std::min(pid_ptr_->getControlOutput(error),
                                        (float)kXycarSteeringAngleLimit));
@@ -107,21 +87,10 @@ void LaneKeepingSystem::speed_control(float steering_angle) {
     xycar_speed_ = std::min(xycar_speed_, xycar_max_speed_);
   }
   hough_transform_lane_detector_ptr_->getSpeed(xycar_speed_);
-  // if (xycar_speed_ > 20){
-  //   hough_transform_lane_detector_ptr_->roi_start_height_ = 350;
-  // }
 }
 
 void LaneKeepingSystem::drive(float steering_angle) {
   xycar_msgs::xycar_motor motor_msg;
-  /*
-  if (steering_angle < -40){
-    steering_angle = -50;
-  }
-  else if (steering_angle > 40){
-    steering_angle = 50;
-  }
-  */
   if (abs(steering_angle) < 10)
   {
     steering_angle = 0; 

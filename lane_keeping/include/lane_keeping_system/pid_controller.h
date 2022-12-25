@@ -1,10 +1,3 @@
-/**
- * @file pid_controller.h
- * @author Jongrok Lee (lrrghdrh@naver.com)
- * @brief PID Controller Class header file
- * @version 0.2
- * @date 2022-11-27
- */
 #ifndef PID_CONTROLLER_H_
 #define PID_CONTROLLER_H_
 
@@ -14,12 +7,12 @@ public:
   // Construct a new PID object
   PID(float p_gain, float i_gain, float d_gain);
   // Calculate PID control
-  float getControlOutput(int error);
+  float getControlOutput(int32_t error);
 
-  float getAngle(float angle1);
+  float getAngle(float angle);
 
 private:
-  float angle;
+  float current_angle;
   float p_gain_;
   float i_gain_;
   float d_gain_;

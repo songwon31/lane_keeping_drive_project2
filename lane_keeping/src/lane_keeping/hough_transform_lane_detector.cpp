@@ -1,10 +1,3 @@
-/**
- * @file hough_transform_lane_detector.cpp
- * @author Jongrok Lee (lrrghdrh@naver.com)
- * @brief hough transform lane detector class source file
- * @version 0.2
- * @date 2022-11-27
- */
 #include "lane_keeping_system/hough_transform_lane_detector.h"
 
 namespace xycar {
@@ -17,48 +10,51 @@ HoughTransformLaneDetector::HoughTransformLaneDetector(
 }
 
 void HoughTransformLaneDetector::set(const YAML::Node &config) {
-  image_width_ = config["IMAGE"]["WIDTH"].as<int>();
-  image_height_ = config["IMAGE"]["HEIGHT"].as<int>();
-  roi_start_height_ = config["IMAGE"]["ROI_START_HEIGHT"].as<int>();
-  roi_height_ = config["IMAGE"]["ROI_HEIGHT"].as<int>();
-  canny_edge_low_threshold_ = config["CANNY"]["LOW_THRESHOLD"].as<int>();
-  canny_edge_high_threshold_ = config["CANNY"]["HIGH_THRESHOLD"].as<int>();
-  hough_line_slope_range_ = config["HOUGH"]["ABS_SLOPE_RANGE"].as<float>();
-  hough_threshold_ = config["HOUGH"]["THRESHOLD"].as<int>();
-  hough_min_line_length_ = config["HOUGH"]["MIN_LINE_LENGTH"].as<int>();
-  hough_max_line_gap_ = config["HOUGH"]["MAX_LINE_GAP"].as<int>();
+  image_width_ = config["IMAGE"]["WIDTH"].as<uint16_t>();
+  image_height_ = config["IMAGE"]["HEIGHT"].as<uint16_t>();
+  roi_start_height_ = config["IMAGE"]["ROI_START_HEIGHT"].as<uint16_t>();
+  roi_height_ = config["IMAGE"]["ROI_HEIGHT"].as<uint8_t>();
+  canny_edge_low_threshold_ = config["CANNY"]["LOW_THRESHOLD"].as<uint16_t>();
+  canny_edge_high_threshold_ = config["CANNY"]["HIGH_THRESHOLD"].as<uint16_t>();
+  hough_line_slope_range_ = config["HOUGH"]["ABS_SLOPE_RANGE"].as<uint16_t>();
+  hough_threshold_ = config["HOUGH"]["THRESHOLD"].as<uint8_t>();
+  hough_min_line_length_ = config["HOUGH"]["MIN_LINE_LENGTH"].as<uint8_t>();
+  hough_max_line_gap_ = config["HOUGH"]["MAX_LINE_GAP"].as<uint8_t>();
   debug_ = config["DEBUG"].as<bool>();
 
   left_mean = -1;
   right_mean = -1;
 
   l_weight_.reserve(lSampleSize_);
-  for (int i = 1; i <= lSampleSize_; ++i) {
+  for (uint16_t i = 1; i <= lSampleSize_; ++i) {
     l_weight_.push_back(i*i);
   }
 
   r_weight_.reserve(rSampleSize_);
-  for (int i = 1; i <= rSampleSize_; ++i) {
+  for (uint16_t i = 1; i <= rSampleSize_; ++i) {
     r_weight_.push_back(i*i);
   }
 }
 
-cv::Mat *HoughTransformLaneDetector::getDebugFrame() { return &debug_frame_; }
-
-void HoughTransformLaneDetector::getSpeed(int speed) {
-  speed2 = speed;
+void HoughTransformLaneDetector::getSpeed(uint8_t speed) {
+  current_speed = speed;
 }
 
 std::pair<float, float> HoughTransformLaneDetector::get_line_params(
-  const std::vector<cv::Vec4i> &lines, const std::vector<int> &line_index) {
-  int lines_size = line_index.size();
+  const std::vector<cv::Vec4i> &lines, const std::vector<uint16_t> &line_index) {
+  uint32_t lines_size = line_index.size();
   if (lines_size == 0) {
     return std::pair<float, float>(0.0f, 0.0f);
   }
 
-  int x1, y1, x2, y2;
-  float x_sum = 0.0f, y_sum = 0.0f, m_sum = 0.0f;
-  for (int i = 0; i < lines_size; ++i) {
+  uint16_t x1;
+  uint16_t y1;
+  uint16_t x2;
+  uint16_t y2;
+  float x_sum = 0.0f;
+  float y_sum = 0.0f;
+  float slope_sum = 0.0f;
+  for (uint32_t i = 0; i < lines_size; ++i) {
     x1 = lines[line_index[i]][kHoughIndex::x1],
     y1 = lines[line_index[i]][kHoughIndex::y1];
     x2 = lines[line_index[i]][kHoughIndex::x2],
@@ -69,34 +65,39 @@ std::pair<float, float> HoughTransformLaneDetector::get_line_params(
 
     if (x2 == x1) {
       if (y1 > y2) {
-            m_sum += -30.0f;
+            slope_sum += -30.0f;
           } else {
-            m_sum += 30.0f;
+            slope_sum += 30.0f;
           }
     } else {
-      m_sum += (float)(y2 - y1) / (float)(x2 - x1);
+      slope_sum += (float)(y2 - y1) / (float)(x2 - x1);
     }
   }
 
-  float x_avg, y_avg, m, b;
+  float x_avg;
+  float y_avg;
+  float slope;
+  float y_intercept;
   x_avg = x_sum / (lines_size * 2);
   y_avg = y_sum / (lines_size * 2);
-  m = m_sum / lines_size;
-  b = y_avg - m * x_avg;
+  slope = slope_sum / lines_size;
+  y_intercept = y_avg - slope * x_avg;
 
-  std::pair<float, float> m_and_b(m, b);
-  return m_and_b;
+  std::pair<float, float> slope_and_y_intercept(slope, y_intercept);
+  return slope_and_y_intercept;
 }
 
-int HoughTransformLaneDetector::get_line_pos(
+uint16_t HoughTransformLaneDetector::get_line_pos(
   const std::vector<cv::Vec4i> &lines,
-  const std::vector<int> &line_index,
+  const std::vector<uint16_t> &line_index,
   const bool direction) {
-  float m, b;
-  std::tie(m, b) = get_line_params(lines, line_index);
+  float slope;
+  float y_intercept;
+  std::tie(slope, y_intercept) = get_line_params(lines, line_index);
 
-  float y, pos;
-  if (m == 0.0 && b == 0.0) {
+  float y;
+  float pos;
+  if (slope == 0.0 && y_intercept == 0.0) {
     if (direction == kLeftLane) {
       if (invaild_path_flag)
       {
@@ -118,32 +119,36 @@ int HoughTransformLaneDetector::get_line_pos(
     }
   } else {
     y = (float)roi_height_ * 0.5;
-    pos = (y - b) / m;
+    pos = (y - y_intercept) / slope;
   }
-  return std::round(pos);
+  return (uint16_t)std::round(pos);
 }
 
-std::pair<std::vector<int>, std::vector<int>>
+std::pair<std::vector<uint16_t>, std::vector<uint16_t>>
 HoughTransformLaneDetector::divideLines(const std::vector<cv::Vec4i> &lines) {
-  int lines_size = lines.size();
-  std::vector<int> left_line_index;
-  std::vector<int> right_line_index;
+  uint32_t lines_size = lines.size();
+  std::vector<uint16_t> left_line_index;
+  std::vector<uint16_t> right_line_index;
   left_line_index.reserve(lines_size);
   right_line_index.reserve(lines_size);
-  int x1, y1, x2, y2;
+  uint16_t x1;
+  uint16_t y1;
+  uint16_t x2;
+  uint16_t y2;
   float slope;
   float left_line_x_sum = 0.0f;
   float right_line_x_sum = 0.0f;
-  float left_x_avg, right_x_avg;
+  float left_x_avg;
+  float right_x_avg;
 
-  int max_left_x1;
-  int max_left_x2 = 0;
-  int max_left_index = -1;
-  int min_right_x2;
+  uint16_t max_left_x1;
+  uint16_t max_left_x2 = 0;
+  uint16_t max_left_index = -1;
+  uint16_t min_right_x2;
   int min_right_x1 = 640;
   int min_right_index = -1;
 
-  for (int i = 0; i < lines_size; ++i) {
+  for (uint32_t i = 0; i < lines_size; ++i) {
     x1 = lines[i][kHoughIndex::x1], y1 = lines[i][kHoughIndex::y1];
     x2 = lines[i][kHoughIndex::x2], y2 = lines[i][kHoughIndex::y2];
     if (x2 - x1 == 0) {
@@ -189,31 +194,6 @@ HoughTransformLaneDetector::divideLines(const std::vector<cv::Vec4i> &lines) {
         right_line_x_sum += (float)(x1 + x2) * 0.5;
         right_line_index.push_back(i);
       }
-      
-    
-      /*
-      if (((slope < 0) || (slope > 0 && x2 < 100)) &&
-          (left_mean == -2 || (left_mean != -1 && std::abs(left_mean - x_mean) < 80) || (left_mean == -1 && x2 < 320))) {
-          left_line_x_sum += (float)(x1 + x2) * 0.5;
-          left_line_index.push_back(i);
-      } else if (((0 < slope && x1 > 100) || (slope < 0 && x1>540)) &&
-          (right_mean == -2 || (right_mean != -1 && std::abs(right_mean - x_mean) < 80) || (right_mean == -1 && x1 > 320))) {
-          right_line_x_sum += (float)(x1 + x2) * 0.5;
-          right_line_index.push_back(i);
-      }
-      */
-      
-      /*
-      if (
-          (left_mean == -2 || (left_mean != -1 && std::abs(left_mean - x_mean) < 80) || (left_mean == -1 && x2 < 320))) {
-          left_line_x_sum += (float)(x1 + x2) * 0.5;
-          left_line_index.push_back(i);
-      } else if (
-          (right_mean == -2 || (right_mean != -1 && std::abs(right_mean - x_mean) < 80) || (right_mean == -1 && x1 > 320))) {
-          right_line_x_sum += (float)(x1 + x2) * 0.5;
-          right_line_index.push_back(i);
-      }
-      */
     }
   }
 
@@ -238,11 +218,11 @@ HoughTransformLaneDetector::divideLines(const std::vector<cv::Vec4i> &lines) {
     }
   }
 
-  return std::pair<std::vector<int>, std::vector<int>>(
+  return std::pair<std::vector<uint16_t>, std::vector<uint16_t>>(
     std::move(left_line_index), std::move(right_line_index));
 }
 
-std::pair<int, int> HoughTransformLaneDetector::getLanePosition(
+std::pair<uint16_t, uint16_t> HoughTransformLaneDetector::getLanePosition(
   const cv::Mat &image) {
   cv::Mat gray_image;
   cv::cvtColor(image, gray_image, cv::COLOR_BGR2GRAY);
@@ -253,9 +233,9 @@ std::pair<int, int> HoughTransformLaneDetector::getLanePosition(
             canny_image,
             canny_edge_low_threshold_,
             canny_edge_high_threshold_);
-   if (speed2 > 22) {
+  if (current_speed > 22) {
     roi_start_height_ = 340;
-  } else if (speed2 > 20){
+  } else if (current_speed > 20){
     roi_start_height_ = 345;
   } else{
     roi_start_height_ = 360;
@@ -274,15 +254,16 @@ std::pair<int, int> HoughTransformLaneDetector::getLanePosition(
                   hough_min_line_length_,
                   hough_max_line_gap_);
   if (all_lines.size() == 0) {
-    return std::pair<int, int>(0,image_width_);
+    return std::pair<uint16_t, uint16_t>(0, image_width_);
   }
 
-  std::vector<int> left_line_index, right_line_index;
+  std::vector<uint16_t> left_line_index;
+  std::vector<uint16_t> right_line_index;
   std::tie(left_line_index, right_line_index) =
     std::move(divideLines(all_lines));
 
-  int lpos = get_line_pos(all_lines, left_line_index, kLeftLane);
-  int rpos = get_line_pos(all_lines, right_line_index, kRightLane);
+  uint16_t lpos = get_line_pos(all_lines, left_line_index, kLeftLane);
+  uint16_t rpos = get_line_pos(all_lines, right_line_index, kRightLane);
 
   if (lpos == 0 && rpos == image_width_) {
     l_samples_.clear();
@@ -296,119 +277,26 @@ std::pair<int, int> HoughTransformLaneDetector::getLanePosition(
     right_mean =getRWeightedMovingAverage();
   }
 
-  if (debug_) {
-    image.copyTo(debug_frame_);
-    draw_lines(all_lines, left_line_index, right_line_index);
-  }
-
-  return std::pair<int, int>(lpos, rpos);
+  return std::pair<uint16_t, uint16_t>(lpos, rpos);
 }
 
-void HoughTransformLaneDetector::draw_lines(
-  const std::vector<cv::Vec4i> &lines,
-  const std::vector<int> &left_line_index,
-  const std::vector<int> &right_line_index) {
-  cv::Point2i pt1, pt2;
-  cv::Scalar color;
-  for (int i = 0; i < left_line_index.size(); ++i) {
-    pt1 = cv::Point2i(
-      lines[left_line_index[i]][kHoughIndex::x1],
-      lines[left_line_index[i]][kHoughIndex::y1] + roi_start_height_);
-    pt2 = cv::Point2i(
-      lines[left_line_index[i]][kHoughIndex::x2],
-      lines[left_line_index[i]][kHoughIndex::y2] + roi_start_height_);
-    int r, g, b;
-    r = (float)std::rand() / RAND_MAX * std::numeric_limits<uint8_t>::max();
-    g = (float)std::rand() / RAND_MAX * std::numeric_limits<uint8_t>::max();
-    b = (float)std::rand() / RAND_MAX * std::numeric_limits<uint8_t>::max();
-    color = std::move(cv::Scalar(b, g, r));
-    cv::line(debug_frame_, pt1, pt2, color, kDebgLineWidth);
-  }
-  for (int i = 0; i < right_line_index.size(); ++i) {
-    pt1 = cv::Point2i(
-      lines[right_line_index[i]][kHoughIndex::x1],
-      lines[right_line_index[i]][kHoughIndex::y1] + roi_start_height_);
-    pt2 = cv::Point2i(
-      lines[right_line_index[i]][kHoughIndex::x2],
-      lines[right_line_index[i]][kHoughIndex::y2] + roi_start_height_);
-    int r, g, b;
-    r = (float)std::rand() / RAND_MAX * std::numeric_limits<uint8_t>::max();
-    g = (float)std::rand() / RAND_MAX * std::numeric_limits<uint8_t>::max();
-    b = (float)std::rand() / RAND_MAX * std::numeric_limits<uint8_t>::max();
-    color = std::move(cv::Scalar(b, g, r));
-    cv::line(debug_frame_, pt1, pt2, color, kDebgLineWidth);
-  }
-}
-
-void HoughTransformLaneDetector::draw_rectangles(int lpos,
-                                                 int rpos,
-                                                 int ma_pos) {
-  static cv::Scalar kCVRed(0, 0, 255);
-  static cv::Scalar kCVGreen(0, 255, 0);
-  static cv::Scalar kCVBlue(255, 0, 0);
-  cv::rectangle(debug_frame_,
-                cv::Point(lpos - kDebugRectangleHalfWidth,
-                          kDebugRectangleStartHeight + roi_start_height_),
-                cv::Point(lpos + kDebugRectangleHalfWidth,
-                          kDebugRectangleEndHeight + roi_start_height_),
-                kCVGreen,
-                kDebgLineWidth);
-  cv::rectangle(debug_frame_,
-                cv::Point(rpos - kDebugRectangleHalfWidth,
-                          kDebugRectangleStartHeight + roi_start_height_),
-                cv::Point(rpos + kDebugRectangleHalfWidth,
-                          kDebugRectangleEndHeight + roi_start_height_),
-                kCVGreen,
-                kDebgLineWidth);
-  cv::rectangle(debug_frame_,
-                cv::Point(ma_pos - kDebugRectangleHalfWidth,
-                          kDebugRectangleStartHeight + roi_start_height_),
-                cv::Point(ma_pos + kDebugRectangleHalfWidth,
-                          kDebugRectangleEndHeight + roi_start_height_),
-                kCVRed,
-                kDebgLineWidth);
-  cv::rectangle(debug_frame_,
-                cv::Point(image_width_ / 2 - kDebugRectangleHalfWidth,
-                          kDebugRectangleStartHeight + roi_start_height_),
-                cv::Point(image_width_ / 2 + kDebugRectangleHalfWidth,
-                          kDebugRectangleEndHeight + roi_start_height_),
-                kCVBlue,
-                kDebgLineWidth);
-}
-
-void HoughTransformLaneDetector::addLSample(int new_sample) {
+void HoughTransformLaneDetector::addLSample(uint16_t new_sample) {
   l_samples_.push_back(new_sample);
   if (l_samples_.size() > lSampleSize_) {
     l_samples_.pop_front();
   }
 }
 
-void HoughTransformLaneDetector::addRSample(int new_sample) {
+void HoughTransformLaneDetector::addRSample(uint16_t new_sample) {
   r_samples_.push_back(new_sample);
   if (r_samples_.size() > rSampleSize_) {
     r_samples_.pop_front();
   }
 }
 
-float HoughTransformLaneDetector::getLMovingAverage() {
-  int sum = 0, sample_size = l_samples_.size();
-  for (uint8_t i = 0; i < sample_size; ++i) {
-    sum += l_samples_[i];
-  }
-  return (float)sum / sample_size;
-}
-
-float HoughTransformLaneDetector::getRMovingAverage() {
-  int sum = 0, sample_size = r_samples_.size();
-  for (uint8_t i = 0; i < sample_size; ++i) {
-    sum += r_samples_[i];
-  }
-  return (float)sum / sample_size;
-}
-
 float HoughTransformLaneDetector::getLWeightedMovingAverage() {
-  int sum = 0, weight_sum = 0;
-  for (uint8_t i = 0; i < l_samples_.size(); ++i) {
+  uint32_t sum = 0, weight_sum = 0;
+  for (uint32_t i = 0; i < l_samples_.size(); ++i) {
     sum += l_samples_[i] * l_weight_[i];
     weight_sum += l_weight_[i];
   }
@@ -419,8 +307,8 @@ float HoughTransformLaneDetector::getLWeightedMovingAverage() {
 }
 
 float HoughTransformLaneDetector::getRWeightedMovingAverage() {
-  int sum = 0, weight_sum = 0;
-  for (uint8_t i = 0; i < r_samples_.size(); ++i) {
+  uint32_t sum = 0, weight_sum = 0;
+  for (uint32_t i = 0; i < r_samples_.size(); ++i) {
     sum += r_samples_[i] * r_weight_[i];
     weight_sum += r_weight_[i];
   }

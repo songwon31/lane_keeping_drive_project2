@@ -1,10 +1,3 @@
-/**
- * @file lane_keeping_system.h
- * @author Jongrok Lee (lrrghdrh@naver.com)
- * @brief Lane Keeping System Class header file
- * @version 0.2
- * @date 2022-11-27
- */
 #ifndef LANE_KEEPING_SYSTEM_H_
 #define LANE_KEEPING_SYSTEM_H_
 
@@ -66,7 +59,7 @@ private:
   ros::Subscriber object_sub_;
   std::string pub_topic_name_;
   std::string sub_topic_name_;
-  int queue_size_;
+  uint16_t queue_size_;
   xycar_msgs::xycar_motor msg_;
 
   // OpenCV Image processing Variables
@@ -80,14 +73,8 @@ private:
   float acceleration_step_;
   float deceleration_step_;
 
-  int straight_count;
-
   // Debug Flag
   bool debug_;
-
-  cv::Mat p_frame1;
-  cv::Mat p_frame2;
-
 };
 }  // namespace xycar
 

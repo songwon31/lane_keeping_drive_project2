@@ -1,10 +1,3 @@
-/**
- * @file pid_controller.cpp
- * @author Jongrok Lee (lrrghdrh@naver.com)
- * @brief PID Controller Class source file
- * @version 0.2
- * @date 2022-11-27
- */
 #include "lane_keeping_system/pid_controller.h"
 #include <cmath>
 namespace xycar {
@@ -15,13 +8,13 @@ PID::PID(float p_gain, float i_gain, float d_gain)
   d_error_ = 0.0f;
 }
 
-float PID::getAngle(float angle1) {
-  angle = angle1;
+float PID::getAngle(float angle) {
+  current_angle = angle;
 }
 
-float PID::getControlOutput(int error) {
+float PID::getControlOutput(int32_t error) {
   
-  if (abs(angle)>23) {
+  if (abs(current_angle)>23) {
     p_gain_ = 0.52f;
     i_gain_ = 0.000388f;
     d_gain_ = 0.00f;

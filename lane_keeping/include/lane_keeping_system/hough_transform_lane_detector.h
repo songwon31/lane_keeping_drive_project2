@@ -1,10 +1,3 @@
-/**
- * @file hough_transform_lane_detector.h
- * @author Jongrok Lee (lrrghdrh@naver.com)
- * @brief Hough Transform Lane Detector class header file
- * @version 0.2
- * @date 2022-11-27
- */
 #ifndef HOUGH_TRANSFORM_LANE_DETECTOR_H_
 #define HOUGH_TRANSFORM_LANE_DETECTOR_H_
 #include <yaml-cpp/yaml.h>
@@ -18,82 +11,53 @@
 namespace xycar {
 class HoughTransformLaneDetector final {
 public:
-  // Construct a new Hough Transform Lane Detector object
   HoughTransformLaneDetector(const YAML::Node &config);
-  // Detect Lane position
-  std::pair<int, int> getLanePosition(const cv::Mat &image);
-  // Draw rectagles on debug image
-  void draw_rectangles(int lpos, int rpos, int ma_mpos);
-
-  // Get debug image
-  cv::Mat *getDebugFrame();
-
-  void getSpeed(int speed1);
-
-
-  //roi params
-  int roi_start_height_;
-  int roi_height_;
+  std::pair<uint16_t, uint16_t> getLanePosition(const cv::Mat &image);
+  void getSpeed(uint8_t speed);
 
 private:
-  // Set parameters from config file
   void set(const YAML::Node &config);
-  // Divide lines into left and right
-  std::pair<std::vector<int>, std::vector<int>> divideLines(
+  std::pair<std::vector<uint16_t>, std::vector<uint16_t>> divideLines(
     const std::vector<cv::Vec4i> &lines);
-  // get position of left and right line
-  int get_line_pos(const std::vector<cv::Vec4i> &lines,
-                   const std::vector<int> &line_index,
+  uint16_t get_line_pos(const std::vector<cv::Vec4i> &lines,
+                   const std::vector<uint16_t> &line_index,
                    bool direction);
-  // get slpoe and intercept of line
   std::pair<float, float> get_line_params(const std::vector<cv::Vec4i> &lines,
-                                          const std::vector<int> &line_index);
-  // draw line on debug image
-  void draw_lines(const std::vector<cv::Vec4i> &lines,
-                  const std::vector<int> &left_line_index,
-                  const std::vector<int> &right_line_index);
-
-  void addLSample(int new_sample);
+                                          const std::vector<uint16_t> &line_index);
+  void addLSample(uint16_t new_sample);
   float getLWeightedMovingAverage();
-  float getLMovingAverage();
-
-  void addRSample(int new_sample);
+  void addRSample(uint16_t new_sample);
   float getRWeightedMovingAverage();
-  float getRMovingAverage();
 
-  
 private:
-  // Hough Transform Parameters
   enum kHoughIndex { x1 = 0, y1, x2, y2 };
   static const double kHoughRho;
   static const double kHoughTheta;
-  static const int kDebgLineWidth = 2;
-  static const int kDebugRectangleHalfWidth = 5;
-  static const int kDebugRectangleStartHeight = 15;
-  static const int kDebugRectangleEndHeight = 25;
-  int canny_edge_low_threshold_;
-  int canny_edge_high_threshold_;
+  uint16_t canny_edge_low_threshold_;
+  uint16_t canny_edge_high_threshold_;
   float hough_line_slope_range_;
-  int hough_threshold_;
-  int hough_min_line_length_;
-  int hough_max_line_gap_;
+  uint8_t hough_threshold_;
+  uint8_t hough_min_line_length_;
+  uint8_t hough_max_line_gap_;
+
+  //roi params
+  uint16_t roi_start_height_;
+  uint8_t roi_height_;
 
   // Image parameters
-  int image_width_;
-  int image_height_;
-  int speed2;
+  uint16_t image_width_;
+  uint16_t image_height_;
+  uint8_t current_speed;
 
-  int pre_left[10] = {0,};
-  int pre_right[10] = {640, };
-  int left_mean = -1;
-  int right_mean = -1;
+  int32_t left_mean;
+  int32_t right_mean;
 
-  const int lSampleSize_ = 10;
-  const int rSampleSize_ = 10;
-  std::vector<int> l_weight_;
-  std::vector<int> r_weight_;
-  std::deque<int> l_samples_;
-  std::deque<int> r_samples_;
+  const uint16_t lSampleSize_ = 10;
+  const uint16_t rSampleSize_ = 10;
+  std::vector<uint16_t> l_weight_;
+  std::vector<uint16_t> r_weight_;
+  std::deque<uint16_t> l_samples_;
+  std::deque<uint16_t> r_samples_;
 
   // line type falg
   static const bool kLeftLane = true;
@@ -101,10 +65,7 @@ private:
 
   bool invaild_path_flag;
 
-  // Debug Image and flag
-  cv::Mat debug_frame_;
   bool debug_;
-
 };
 }  // namespace xycar
 #endif  // HOUGH_TRANSFORM_LANE_DETECTOR_H_
